@@ -1,0 +1,23 @@
+{
+  "name": "building-blocks",
+  "version": "1.0.0",
+  "description": "Lightweight native web components with data bound templates",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hobberwickey/building-blocks.git"
+  },
+  "keywords": [
+    "Web",
+    "Components"
+  ],
+  "author": "Joel Weber",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/hobberwickey/building-blocks/issues"
+  },
+  "homepage": "https://github.com/hobberwickey/building-blocks#readme"
+}

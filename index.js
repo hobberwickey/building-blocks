@@ -170,6 +170,7 @@ class BuildingBlocks extends HTMLElement {
 
         binding.attrs[attr] = {
           snippet: snippet,
+          ctx: null,
           created: [],
           bindings: [],
         };
@@ -262,6 +263,12 @@ class BuildingBlocks extends HTMLElement {
       return ctx;
     };
 
+    const updateTemplateContext = (ctx, oCtx) => {
+      for (var key in oCtx.__observed__) {
+        ctx[key] = oCtx[key];
+      }
+    };
+
     const bindTemplate = (el, oCtx) => {
       let templateIdx = [...el.parentNode.querySelectorAll("template")].indexOf(
         el,
@@ -317,7 +324,6 @@ class BuildingBlocks extends HTMLElement {
           // who's values have been removed
           let previouslyCreated = binding.attrs[attr].created || [];
           for (let i = 0; i < previouslyCreated.length; i++) {
-            // console.log(previouslyCreated[i], previouslyCreated[i].parentNode);
             previouslyCreated[i].parentNode.removeChild(previouslyCreated[i]);
           }
 
@@ -414,38 +420,52 @@ class BuildingBlocks extends HTMLElement {
           // Create a document fagment to append items to
           let frag = document.createDocumentFragment();
 
-          // Remove all any elements created from a previous call
-          // TODO: this should be smarter, and remove only those
-          // who's values have been removed
-
+          // Get the previously created elements and context
           let previouslyCreated = binding.attrs[attr].created || [];
-          for (let i = 0; i < previouslyCreated.length; i++) {
-            previouslyCreated[i].parentNode.removeChild(previouslyCreated[i]);
-          }
+          let previousCtx = binding.attrs[attr].ctx || null;
 
+          // Scoped variables
           let created = [];
+          let createdCtx = null;
           let child_bindings = {};
+
+          // Check if the test function is truthy
           if (condtional) {
-            // Clone the template
-            let item = el.content.cloneNode(true);
+            // Check if there is a previously created element and context
+            if (previouslyCreated.length > 0 && previousCtx !== null) {
+              // If so, all we need to do is update the values of the
+              // previously created context with the new values
+              updateTemplateContext(previousCtx, oCtx);
+              return;
+            } else {
+              // If not then we need to create the element and it's bindings
 
-            // Create a new context
-            let ctx = createTemplateContext(oCtx, null, null, null);
+              // Clone the template
+              let item = el.content.cloneNode(true);
 
-            // Parse the template
-            walk(item, ctx, true);
+              // Create a new context
+              let ctx = createTemplateContext(oCtx, null, null, null);
 
-            // Render the context
-            this.__render__(ctx, true);
+              // Parse the template
+              walk(item, ctx, true);
 
-            // Keep track of created items
-            created.push(...item.childNodes);
+              // Render the context
+              this.__render__(ctx);
 
-            // append then render
-            frag.append(item);
+              // Keep track of created items
+              created.push(...item.childNodes);
+              createdCtx = ctx;
 
-            // If this the template is being rendered create bindings on the parent scope
-            el.parentNode.insertBefore(frag, el);
+              // append then render
+              frag.append(item);
+
+              // If this the template is being rendered create bindings on the parent scope
+              el.parentNode.insertBefore(frag, el);
+            }
+          } else {
+            for (let i = 0; i < previouslyCreated.length; i++) {
+              previouslyCreated[i].parentNode.removeChild(previouslyCreated[i]);
+            }
           }
 
           // Keep track of all the observers
@@ -465,6 +485,7 @@ class BuildingBlocks extends HTMLElement {
 
           // Set the created elements to be removed on the next render
           binding.attrs[attr].created = created;
+          binding.attrs[attr].ctx = createdCtx;
         };
 
         binding.attrs[`template-${templateIdx}`].bindings.push(fn);
@@ -565,9 +586,6 @@ class BuildingBlocks extends HTMLElement {
         }
       }
     }
-
-    // console.log(ctx.__bindings__);
-    // console.log(ctx.__observed__);
 
     ctx.__current_target__ = null;
   }

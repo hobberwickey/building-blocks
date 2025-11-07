@@ -1,6 +1,6 @@
 import path from "path";
 
-export default function (filecontent) {
+export default function (filecontent, map, meta) {
   let callback = this.async();
   let componentPath = path.resolve("./component.js");
 
@@ -30,9 +30,11 @@ export default function (filecontent) {
     console.log(`Bundling Component ${elementName}`);
   }
 
-  return `
+  callback(
+    null,
+    `import BuildingBlocks from 'building-blocks';
+    
     (() => {
-      import BuildingBlocks from 'building-blocks';
 
       if (typeof Component === undefined) {
         return console.warn("'Component' class must be loaded before individual components");
@@ -52,5 +54,8 @@ export default function (filecontent) {
           this.__template__ = template;
         }    
       });      
-    })();`;
+    })();`,
+    map,
+    meta,
+  );
 }

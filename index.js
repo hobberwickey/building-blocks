@@ -170,9 +170,8 @@ class BuildingBlocks extends HTMLElement {
 
         binding.attrs[attr] = {
           snippet: snippet,
-          ctx: null,
-          created: [],
           bindings: [],
+          previous: {},
         };
       }
 
@@ -285,6 +284,21 @@ class BuildingBlocks extends HTMLElement {
           }`,
         );
 
+        let idSnippet = el.getAttribute(":id");
+        if (!idSnippet) {
+          console.warn(
+            "For loop templates must have an :id, index is being used as a default but that could result in unnecessary reredeners",
+          );
+          idSnippet = "$idx";
+        }
+
+        let idFunction = new Function(
+          `scope`,
+          `with(scope) {
+            return ${idSnippet}
+          }`,
+        );
+
         // Create a child binding for this template
         oCtx.__childbindings__.push({
           el: el,
@@ -320,23 +334,29 @@ class BuildingBlocks extends HTMLElement {
           let frag = document.createDocumentFragment();
 
           // Remove all any elements created from a previous call
-          // TODO: this should be smarter, and remove only those
-          // who's values have been removed
-          let previouslyCreated = binding.attrs[attr].created || [];
-          for (let i = 0; i < previouslyCreated.length; i++) {
-            previouslyCreated[i].parentNode.removeChild(previouslyCreated[i]);
-          }
+          let previous = binding.attrs[attr].previous;
+          let previousIds = Object.keys(previous);
+          let deletedIds = Object.keys(previous);
 
-          let created = [];
           if (!!iterator) {
             let idx = 0;
             let child_bindings = {};
             for (let key in iterator) {
-              // Clone the template
-              let item = el.content.cloneNode(true);
-
-              // Create a new context
+              // Create a new context, evaluate the idFunction with it
               let ctx = createTemplateContext(oCtx, idx, key, iterator[key]);
+              let ctxValues = ctx.__get_values__(ctx);
+              let id = idFunction(ctxValues).toString();
+
+              if (previousIds.includes(id)) {
+                updateTemplateContext(previous[id].ctx, oCtx);
+                deletedIds = deletedIds.filter((_id) => _id !== id);
+                idx++;
+                continue;
+              }
+
+              // Clone the template
+              let created = [];
+              let item = el.content.cloneNode(true);
 
               // Parse the template
               walk(item, ctx, true);
@@ -359,6 +379,11 @@ class BuildingBlocks extends HTMLElement {
                 }
               }
 
+              // Store the created elements and context under the id
+              previous[id] = {
+                elements: created,
+                ctx: ctx,
+              };
               // increment the index
               idx++;
             }
@@ -371,7 +396,15 @@ class BuildingBlocks extends HTMLElement {
           }
 
           // Set the created elements to be removed on the next render
-          binding.attrs[attr].created = created;
+          for (let i = 0; i < deletedIds.length; i++) {
+            let id = deletedIds[i];
+            let doomed = previous[id].elements;
+            for (let j = 0; j < doomed.length; j++) {
+              doomed[j].parentNode.removeChild(doomed[j]);
+            }
+
+            delete previous[id];
+          }
 
           // If this the template is being rendered create bindings on the parent scope
           el.parentNode.insertBefore(frag, el);
@@ -421,8 +454,13 @@ class BuildingBlocks extends HTMLElement {
           let frag = document.createDocumentFragment();
 
           // Get the previously created elements and context
-          let previouslyCreated = binding.attrs[attr].created || [];
-          let previousCtx = binding.attrs[attr].ctx || null;
+          let previous = binding.attrs[attr].previous["if-key"] || {
+            elements: [],
+            ctx: null,
+          };
+
+          let previouslyCreated = previous.elements;
+          let previousCtx = previous.ctx;
 
           // Scoped variables
           let created = [];
@@ -484,8 +522,10 @@ class BuildingBlocks extends HTMLElement {
           }
 
           // Set the created elements to be removed on the next render
-          binding.attrs[attr].created = created;
-          binding.attrs[attr].ctx = createdCtx;
+          binding.attrs[attr].previous["if-key"] = {
+            elements: created,
+            ctx: createdCtx,
+          };
         };
 
         binding.attrs[`template-${templateIdx}`].bindings.push(fn);
@@ -586,6 +626,9 @@ class BuildingBlocks extends HTMLElement {
         }
       }
     }
+
+    // console.log(ctx.__bindings__);
+    // console.log(ctx.__observed__);
 
     ctx.__current_target__ = null;
   }

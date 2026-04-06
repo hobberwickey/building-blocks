@@ -30,9 +30,21 @@ export default function (filecontent, map, meta) {
     console.log(`Bundling Component ${elementName}`);
   }
 
+  let importRegex =
+    /import\s+(?:{[^{}]+}|.*?)\s*(?:from)?\s*['"].*?['"];?|import\(.*?\);?/;
+  let match;
+  let imports = [];
+  while ((match = scriptContent.match(importRegex))) {
+    imports.push(match[0]);
+    scriptContent =
+      scriptContent.slice(0, match.index) +
+      scriptContent.slice(match.index + match[0].length);
+  }
+
   callback(
     null,
-    `import BuildingBlocks from 'building-blocks';
+    `import { BuildingBlocks } from 'building-blocks';
+    ${imports.join("\n    ")}
     
     (() => {
 

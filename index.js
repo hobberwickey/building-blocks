@@ -1,391 +1,538 @@
-class BuildingBlocks extends HTMLElement {
-  constructor() {
-    super();
+// Just in case this is getting loaded in a context without HTMLElement
+export let BuildingBlocks;
 
-    this.__template__ = null;
-    this.__connected__ = false;
-    this.__children__ = [];
+if (typeof HTMLElement !== "undefined") {
+  BuildingBlocks = class BuildingBlocks extends HTMLElement {
+    constructor() {
+      super();
 
-    // Context Variables
-    this.__bindings__ = [];
-    this.__childbindings__ = [];
-    this.__observed__ = {};
-    this.__values__ = {};
-    this.__current_target__ = null;
-  }
+      this.__template__ = null;
+      this.__connected__ = false;
+      this.__children__ = [];
 
-  static get observedProperties() {
-    return [];
-  }
+      // Context Variables
+      this.__bindings__ = [];
+      this.__childbindings__ = [];
+      this.__observed__ = {};
+      this.__values__ = {};
+      this.__current_target__ = null;
+    }
 
-  listen(key, fn) {
-    const uuid = () => {
-      return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) =>
-        (
-          +c ^
-          (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (+c / 4)))
-        ).toString(16),
-      );
-    };
+    static get observedProperties() {
+      return [];
+    }
 
-    let handle = uuid();
-    if (this.__observed__.hasOwnProperty(key)) {
-      let observers = this.__observed__[key];
-      let idx = observers.findIndex((o) => o.el === this && o.attr === handle);
-
-      let observer = {
-        el: this,
-        attr: handle,
-        hidden: true,
-        snippet: "",
-        context: this,
-        bindings: [
-          (context, values) => {
-            return fn(values[key]);
-          },
-        ],
+    listen(key, fn) {
+      const uuid = () => {
+        return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) =>
+          (
+            +c ^
+            (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (+c / 4)))
+          ).toString(16),
+        );
       };
 
-      if (idx === -1) {
-        observers.push(observer);
-      } else {
-        observers.splice(idx, 1, observer);
+      let handle = uuid();
+      if (this.__observed__.hasOwnProperty(key)) {
+        let observers = this.__observed__[key];
+        let idx = observers.findIndex(
+          (o) => o.el === this && o.attr === handle,
+        );
+
+        let observer = {
+          el: this,
+          attr: handle,
+          hidden: true,
+          snippet: "",
+          context: this,
+          bindings: [
+            (context, values) => {
+              return fn(values[key]);
+            },
+          ],
+        };
+
+        if (idx === -1) {
+          observers.push(observer);
+        } else {
+          observers.splice(idx, 1, observer);
+        }
       }
     }
-  }
 
-  observe(prop, ctx) {
-    ctx = ctx || this;
+    observe(prop, ctx) {
+      ctx = ctx || this;
 
-    ctx.__observed__[prop] = [];
-    ctx.__values__[prop] = ctx[prop];
+      ctx.__observed__[prop] = [];
+      ctx.__values__[prop] = ctx[prop];
 
-    Object.defineProperty(ctx, prop, {
-      get: () => {
-        if (
-          ctx.__current_target__ !== null &&
-          ctx.__observed__.hasOwnProperty(prop)
-        ) {
-          let { el, attr, snippet, context, bindings } = ctx.__current_target__;
+      Object.defineProperty(ctx, prop, {
+        get: () => {
+          if (
+            ctx.__current_target__ !== null &&
+            ctx.__observed__.hasOwnProperty(prop)
+          ) {
+            let { el, attr, snippet, context, bindings } =
+              ctx.__current_target__;
 
-          let observers = ctx.__observed__[prop];
-          let idx = observers.findIndex((o) => o.el === el && o.attr === attr);
+            let observers = ctx.__observed__[prop];
+            let idx = observers.findIndex(
+              (o) => o.el === el && o.attr === attr,
+            );
 
-          if (idx === -1) {
-            observers.push({ ...ctx.__current_target__ });
-          } else {
-            observers.splice(idx, 1, { ...ctx.__current_target__ });
-          }
-        }
-
-        return ctx.__values__[prop];
-      },
-      set: (value) => {
-        if (value !== ctx.__values__[prop]) {
-          ctx.__values__[prop] = value;
-
-          let observers = ctx.__observed__[prop] || [];
-          let len = observers.length;
-
-          for (var i = 0; i < len; i++) {
-            let { el, attr, hidden, snippet, context, bindings } = observers[i];
-            let values = context.__get_values__(ctx);
-
-            for (let i = 0; i < bindings.length; i++) {
-              snippet = bindings[i](snippet, values, attr);
-            }
-
-            if (typeof snippet === "function") {
-              el[attr.replace(":", "")] = snippet.bind(this);
+            if (idx === -1) {
+              observers.push({ ...ctx.__current_target__ });
             } else {
-              el[attr.replace(":", "")] = snippet;
+              observers.splice(idx, 1, { ...ctx.__current_target__ });
             }
+          }
 
-            if (!["array", "object", "function"].includes(typeof snippet)) {
-              if (!hidden && !!el.setAttribute) {
-                el.setAttribute(attr.replace(":", ""), snippet);
+          return ctx.__values__[prop];
+        },
+        set: (value) => {
+          if (value !== ctx.__values__[prop]) {
+            ctx.__values__[prop] = value;
+
+            let observers = ctx.__observed__[prop] || [];
+            let len = observers.length;
+
+            for (var i = 0; i < len; i++) {
+              let { el, attr, hidden, snippet, context, bindings } =
+                observers[i];
+              let values = context.__get_values__(ctx);
+
+              for (let i = 0; i < bindings.length; i++) {
+                snippet = bindings[i](snippet, values, attr);
+              }
+
+              if (typeof snippet === "function") {
+                el[attr.replace(":", "")] = snippet.bind(this);
+              } else {
+                el[attr.replace(":", "")] = snippet;
+              }
+
+              if (!["array", "object", "function"].includes(typeof snippet)) {
+                if (!hidden && !!el.setAttribute) {
+                  el.setAttribute(attr.replace(":", ""), snippet);
+                }
               }
             }
           }
-        }
-      },
-    });
-  }
-
-  connectedCallback() {
-    const name = this.tagName.toLowerCase();
-
-    if (!this.__connected__) {
-      this.__connected__ = true;
-
-      this.constructor.observedProperties.map((prop) => {
-        this.observe(prop, this);
+        },
       });
+    }
 
-      this.__children__ = [...this.children];
-      let template = document.createDocumentFragment();
-      if (!!this.__template__) {
-        template = this.__template__.content.cloneNode(true);
-        this.__parseTemplate__(template, this);
-      }
+    connectedCallback() {
+      const name = this.tagName.toLowerCase();
 
-      this.__render__(this);
+      if (!this.__connected__) {
+        this.__connected__ = true;
 
-      this.appendChild(template);
+        this.constructor.observedProperties.map((prop) => {
+          this.observe(prop, this);
+        });
 
-      if (!!this.connected) {
-        this.connected();
+        this.__children__ = [...this.children];
+        let template = document.createDocumentFragment();
+        if (!!this.__template__) {
+          template = this.__template__.content.cloneNode(true);
+          this.__parseTemplate__(template, this);
+        }
+
+        this.__render__(this);
+
+        this.appendChild(template);
+
+        if (!!this.connected) {
+          this.connected();
+        }
       }
     }
-  }
 
-  __parseTemplate__(template, ctx) {
-    const eventExp = /\@([a-z|A-Z]+)/;
-    const attrExp = /\:([a-z|A-Z]+)/;
-    const boundExp = /\{\{(.*?)\}\}/g;
+    __parseTemplate__(template, ctx) {
+      const eventExp = /\@([a-z|A-Z]+)/;
+      const attrExp = /\:([a-z|A-Z]+)/;
+      const boundExp = /\{\{(.*?)\}\}/g;
 
-    const getBinding = (el, attr, ctx) => {
-      let binding = ctx.__bindings__.find((b) => b.el === el);
+      const getBinding = (el, attr, ctx) => {
+        let binding = ctx.__bindings__.find((b) => b.el === el);
 
-      if (!binding) {
-        binding = {
-          el: el,
-          attrs: {},
-        };
+        if (!binding) {
+          binding = {
+            el: el,
+            attrs: {},
+          };
 
-        ctx.__bindings__.push(binding);
-      }
-
-      if (!binding.attrs[attr]) {
-        let snippet;
-        if (/template\-[0-9]+/i.test(attr)) {
-          let templateIdx = +attr.split("-")[1];
-          snippet = el.querySelectorAll("template")[templateIdx];
-        } else {
-          snippet = el[attr];
-          if (!!el.getAttribute) {
-            snippet = el.getAttribute(attr);
-          }
+          ctx.__bindings__.push(binding);
         }
 
-        binding.attrs[attr] = {
-          snippet: snippet,
-          bindings: [],
-          previous: {},
-        };
-      }
+        if (!binding.attrs[attr]) {
+          let snippet;
+          if (/template\-[0-9]+/i.test(attr)) {
+            let templateIdx = +attr.split("-")[1];
+            snippet = el.querySelectorAll("template")[templateIdx];
+          } else {
+            snippet = el[attr];
+            if (!!el.getAttribute) {
+              snippet = el.getAttribute(attr);
+            }
+          }
 
-      return binding;
-    };
+          binding.attrs[attr] = {
+            snippet: snippet,
+            bindings: [],
+            previous: {},
+          };
+        }
 
-    const bindValue = (el, attr, match, ctx) => {
-      let binding = getBinding(el, attr, ctx);
+        return binding;
+      };
 
-      if (attr === "textContent") {
+      const bindValue = (el, attr, match, ctx) => {
+        let binding = getBinding(el, attr, ctx);
+
+        if (attr === "textContent") {
+          let fn = new Function(
+            "scope",
+            `
+            with(scope) {
+              return ${match[1]}
+            }`,
+          );
+
+          binding.attrs[attr].bindings.push((snippet, values) => {
+            return snippet.replace(match[0], fn(values));
+          });
+        }
+      };
+
+      const bindAttribute = (el, attr, context, ctx) => {
+        let binding = getBinding(el, attr, ctx);
+
         let fn = new Function(
           "scope",
           `
           with(scope) {
-            return ${match[1]}
+            return ${context};
           }`,
         );
 
         binding.attrs[attr].bindings.push((snippet, values) => {
-          return snippet.replace(match[0], fn(values));
+          return fn(values);
         });
-      }
-    };
-
-    const bindAttribute = (el, attr, context, ctx) => {
-      let binding = getBinding(el, attr, ctx);
-
-      let fn = new Function(
-        "scope",
-        `
-        with(scope) {
-          return ${context};
-        }`,
-      );
-
-      binding.attrs[attr].bindings.push((snippet, values) => {
-        return fn(values);
-      });
-    };
-
-    const bindEvent = (el, attr, context, ctx) => {
-      let fn = new Function(
-        "scope",
-        `         
-        with(scope) {
-          return ${context}
-        }`,
-      );
-
-      el.addEventListener(attr.replace("@", ""), (e) => {
-        let values = ctx.__get_values__(ctx);
-
-        values["$event"] = e;
-        fn(values);
-      });
-    };
-
-    const createTemplateContext = (oCtx, idx, key, value) => {
-      let values = {};
-
-      let ctx = {
-        __bindings__: [],
-        __observed__: {},
-        __childbindings__: [],
-        __values__: values,
-        __template__: null,
-        __current_target: null,
-        __parent__: oCtx,
-        __current_target__: null,
-
-        __get_values__: () => {
-          return this.__get_values__(ctx);
-        },
       };
 
-      for (var key in oCtx.__observed__) {
-        ctx[key] = oCtx[key];
-        this.observe(key, ctx);
-      }
-
-      ctx["$idx"] = idx;
-      this.observe("$idx", ctx);
-      ctx["$key"] = key;
-      this.observe("$key", ctx);
-      ctx["$value"] = value;
-      this.observe("$value", ctx);
-
-      return ctx;
-    };
-
-    const updateTemplateContext = (ctx, oCtx) => {
-      for (var key in oCtx.__observed__) {
-        ctx[key] = oCtx[key];
-      }
-    };
-
-    const bindTemplate = (el, oCtx) => {
-      let templateIdx = [...el.parentNode.querySelectorAll("template")].indexOf(
-        el,
-      );
-
-      let binding = getBinding(el.parentNode, `template-${templateIdx}`, oCtx);
-
-      let type = el.hasAttribute(":for") ? "loop" : "if";
-      if (type === "loop") {
-        let iteratorFn = new Function(
-          `scope`,
-          `with(scope) {
-            return ${el.getAttribute(":for")}
+      const bindEvent = (el, attr, context, ctx) => {
+        let fn = new Function(
+          "scope",
+          `         
+          with(scope) {
+            return ${context}
           }`,
         );
 
-        let idSnippet = el.getAttribute(":id");
-        if (!idSnippet) {
-          console.warn(
-            "For loop templates must have an :id, index is being used as a default but that could result in unnecessary reredeners",
-          );
-          idSnippet = "$idx";
-        }
+        el.addEventListener(attr.replace("@", ""), (e) => {
+          let values = ctx.__get_values__(ctx);
 
-        let idFunction = new Function(
-          `scope`,
-          `with(scope) {
-            return ${idSnippet}
-          }`,
-        );
-
-        // Create a child binding for this template
-        oCtx.__childbindings__.push({
-          el: el,
-          bindings: {},
+          values["$event"] = e;
+          fn(values);
         });
+      };
 
-        // Create pass through observers
-        for (let key in oCtx.__observed__) {
-          oCtx.__observed__[key].push({
-            el: el,
-            snippet: null,
-            attr: "for-loop",
-            hidden: true,
-            context: oCtx,
-            bindings: [
-              (snippet, values) => {
-                let child = oCtx.__childbindings__.find((b) => b.el === el);
-                let childBindings = child.bindings[key] || [];
+      const createTemplateContext = (oCtx, idx, key, value) => {
+        let values = {};
 
-                for (let i = 0; i < childBindings.length; i++) {
-                  childBindings[i].context[key] = values[key];
-                }
-              },
-            ],
-          });
+        let ctx = {
+          __bindings__: [],
+          __observed__: {},
+          __childbindings__: [],
+          __values__: values,
+          __template__: null,
+          __current_target: null,
+          __parent__: oCtx,
+          __current_target__: null,
+
+          __get_values__: () => {
+            return this.__get_values__(ctx);
+          },
+        };
+
+        for (var key in oCtx.__observed__) {
+          ctx[key] = oCtx[key];
+          this.observe(key, ctx);
         }
 
-        let fn = (snippet, values, attr) => {
-          // Get the iterator value;
-          let iterator = iteratorFn(values);
+        ctx["$idx"] = idx;
+        this.observe("$idx", ctx);
+        ctx["$key"] = key;
+        this.observe("$key", ctx);
+        ctx["$value"] = value;
+        this.observe("$value", ctx);
 
-          // Create a document fagment to append items to
-          let frag = document.createDocumentFragment();
+        // console.log(ctx)
 
-          // Remove all any elements created from a previous call
-          let previous = binding.attrs[attr].previous;
-          let previousIds = Object.keys(previous);
-          let deletedIds = Object.keys(previous);
+        return ctx;
+      };
 
-          if (!!iterator) {
-            let idx = 0;
-            let child_bindings = {};
-            for (let key in iterator) {
-              // Create a new context, evaluate the idFunction with it
-              let ctx = createTemplateContext(oCtx, idx, key, iterator[key]);
-              let ctxValues = ctx.__get_values__(ctx);
-              let id = idFunction(ctxValues).toString();
+      const updateTemplateContext = (ctx, oCtx) => {
+        for (var key in oCtx.__observed__) {
+          ctx[key] = oCtx[key];
+        }
+      };
 
-              if (previousIds.includes(id)) {
-                updateTemplateContext(previous[id].ctx, oCtx);
-                deletedIds = deletedIds.filter((_id) => _id !== id);
-                idx++;
-                continue;
-              }
+      const bindTemplate = (el, oCtx) => {
+        let templateIdx = [
+          ...el.parentNode.querySelectorAll("template"),
+        ].indexOf(el);
 
-              // Clone the template
-              let created = [];
-              let item = el.content.cloneNode(true);
+        let binding = getBinding(
+          el.parentNode,
+          `template-${templateIdx}`,
+          oCtx,
+        );
 
-              // Parse the template
-              walk(item, ctx, true);
+        let type = el.hasAttribute(":for") ? "loop" : "if";
+        if (type === "loop") {
+          let iteratorFn = new Function(
+            `scope`,
+            `with(scope) {
+              return ${el.getAttribute(":for")}
+            }`,
+          );
 
-              // Render the context
-              this.__render__(ctx, true);
+          let idSnippet = el.getAttribute(":id");
+          if (!idSnippet) {
+            console.warn(
+              "For loop templates must have an :id, index is being used as a default but that could result in unnecessary reredeners",
+            );
+            idSnippet = "$idx";
+          }
 
-              // Keep track of created items
-              created.push(...item.childNodes);
+          let idFunction = new Function(
+            `scope`,
+            `with(scope) {
+              return ${idSnippet}
+            }`,
+          );
 
-              // append then render
-              frag.append(item);
+          // Create a child binding for this template
+          oCtx.__childbindings__.push({
+            el: el,
+            bindings: {},
+          });
 
-              // Keep track of all the observers
-              for (let o in ctx.__observed__) {
-                if (child_bindings.hasOwnProperty(o)) {
-                  child_bindings[o].push(...ctx.__observed__[o]);
-                } else {
-                  child_bindings[o] = [...ctx.__observed__[o]];
+          // Create pass through observers
+          for (let key in oCtx.__observed__) {
+            oCtx.__observed__[key].push({
+              el: el,
+              snippet: null,
+              attr: "for-loop",
+              hidden: true,
+              context: oCtx,
+              bindings: [
+                (snippet, values) => {
+                  let child = oCtx.__childbindings__.find((b) => b.el === el);
+                  let childBindings = child.bindings[key] || [];
+
+                  for (let i = 0; i < childBindings.length; i++) {
+                    childBindings[i].context[key] = values[key];
+                  }
+                },
+              ],
+            });
+          }
+
+          let fn = (snippet, values, attr) => {
+            // Get the iterator value;
+            let iterator = iteratorFn(values);
+
+            // Create a document fagment to append items to
+            let frag = document.createDocumentFragment();
+
+            // Remove all any elements created from a previous call
+            let previous = binding.attrs[attr].previous;
+            let previousIds = Object.keys(previous);
+            let deletedIds = Object.keys(previous);
+
+            if (!!iterator) {
+              let idx = 0;
+              let child_bindings = {};
+              for (let key in iterator) {
+                // Create a new context, evaluate the idFunction with it
+                let ctx = createTemplateContext(oCtx, idx, key, iterator[key]);
+                let ctxValues = ctx.__get_values__(ctx);
+                let id = idFunction(ctxValues).toString();
+
+                if (previousIds.includes(id)) {
+                  updateTemplateContext(previous[id].ctx, ctx);
+                  deletedIds = deletedIds.filter((_id) => _id !== id);
+                  idx++;
+                  continue;
                 }
+
+                // Clone the template
+                let created = [];
+                let item = el.content.cloneNode(true);
+
+                // Parse the template
+                walk(item, ctx, true);
+
+                // Render the context
+                this.__render__(ctx, true);
+
+                // Keep track of created items
+                created.push(...item.childNodes);
+
+                // append then render
+                frag.append(item);
+
+                // Keep track of all the observers
+                for (let o in ctx.__observed__) {
+                  if (child_bindings.hasOwnProperty(o)) {
+                    child_bindings[o].push(...ctx.__observed__[o]);
+                  } else {
+                    child_bindings[o] = [...ctx.__observed__[o]];
+                  }
+                }
+
+                // Store the created elements and context under the id
+                previous[id] = {
+                  elements: created,
+                  ctx: ctx,
+                };
+                // increment the index
+                idx++;
               }
 
-              // Store the created elements and context under the id
-              previous[id] = {
-                elements: created,
-                ctx: ctx,
-              };
-              // increment the index
-              idx++;
+              // Replace the parent context's child bindings with the rendered bindings
+              let childIdx = oCtx.__childbindings__.findIndex(
+                (b) => b.el === el,
+              );
+              if (childIdx !== -1) {
+                oCtx.__childbindings__[childIdx].bindings = child_bindings;
+              }
+            }
+
+            // Set the created elements to be removed on the next render
+            for (let i = 0; i < deletedIds.length; i++) {
+              let id = deletedIds[i];
+              let doomed = previous[id].elements;
+              for (let j = 0; j < doomed.length; j++) {
+                doomed[j].parentNode.removeChild(doomed[j]);
+              }
+
+              delete previous[id];
+            }
+
+            // If this the template is being rendered create bindings on the parent scope
+            el.parentNode.insertBefore(frag, el);
+          };
+
+          binding.attrs[`template-${templateIdx}`].bindings.push(fn);
+        } else if (type === "if") {
+          let conditionalFn = new Function(
+            `scope`,
+            `with(scope) {
+              return ${el.getAttribute(":if")}
+            }`,
+          );
+
+          // Create a child binding for this template
+          oCtx.__childbindings__.push({
+            el: el,
+            bindings: {},
+          });
+
+          // Create pass through observers
+          for (let key in oCtx.__observed__) {
+            oCtx.__observed__[key].push({
+              el: el,
+              snippet: null,
+              attr: `if-block-${templateIdx}`,
+              hidden: true,
+              context: oCtx,
+              bindings: [
+                (snippet, values, attr) => {
+                  let child = oCtx.__childbindings__.find((b) => b.el === el);
+                  let childBindings = child.bindings[key] || [];
+
+                  for (let i = 0; i < childBindings.length; i++) {
+                    childBindings[i].context[key] = values[key];
+                  }
+                },
+              ],
+            });
+          }
+
+          let fn = (snippet, values, attr) => {
+            // Get the iterator value;
+            let condtional = conditionalFn(values);
+
+            // Create a document fagment to append items to
+            let frag = document.createDocumentFragment();
+
+            // Get the previously created elements and context
+            let previous = binding.attrs[attr].previous["if-key"] || {
+              elements: [],
+              ctx: null,
+            };
+
+            let previouslyCreated = previous.elements;
+            let previousCtx = previous.ctx;
+
+            // Scoped variables
+            let created = [];
+            let createdCtx = null;
+            let child_bindings = {};
+
+            // Check if the test function is truthy
+            if (condtional) {
+              // Check if there is a previously created element and context
+              if (previouslyCreated.length > 0 && previousCtx !== null) {
+                // If so, all we need to do is update the values of the
+                // previously created context with the new values
+                updateTemplateContext(previousCtx, oCtx);
+                return;
+              } else {
+                // If not then we need to create the element and it's bindings
+
+                // Clone the template
+                let item = el.content.cloneNode(true);
+
+                // Create a new context
+                let ctx = createTemplateContext(oCtx, null, null, null);
+
+                // Parse the template
+                walk(item, ctx, true);
+
+                // Render the context
+                this.__render__(ctx);
+
+                // Keep track of created items
+                created.push(...item.childNodes);
+                createdCtx = ctx;
+
+                // append then render
+                frag.append(item);
+
+                // If this the template is being rendered create bindings on the parent scope
+                el.parentNode.insertBefore(frag, el);
+              }
+            } else {
+              for (let i = 0; i < previouslyCreated.length; i++) {
+                previouslyCreated[i].parentNode.removeChild(
+                  previouslyCreated[i],
+                );
+              }
+            }
+
+            // Keep track of all the observers
+            for (let o in ctx.__observed__) {
+              if (child_bindings.hasOwnProperty(o)) {
+                child_bindings[o].push(...ctx.__observed__[o]);
+              } else {
+                child_bindings[o] = [...ctx.__observed__[o]];
+              }
             }
 
             // Replace the parent context's child bindings with the rendered bindings
@@ -393,257 +540,141 @@ class BuildingBlocks extends HTMLElement {
             if (childIdx !== -1) {
               oCtx.__childbindings__[childIdx].bindings = child_bindings;
             }
-          }
 
-          // Set the created elements to be removed on the next render
-          for (let i = 0; i < deletedIds.length; i++) {
-            let id = deletedIds[i];
-            let doomed = previous[id].elements;
-            for (let j = 0; j < doomed.length; j++) {
-              doomed[j].parentNode.removeChild(doomed[j]);
+            // Set the created elements to be removed on the next render
+            binding.attrs[attr].previous["if-key"] = {
+              elements: created,
+              ctx: createdCtx,
+            };
+          };
+
+          binding.attrs[`template-${templateIdx}`].bindings.push(fn);
+        }
+      };
+
+      const walk = (el, ctx, log) => {
+        if (!!el.tagName && (el.tagName || "").toLowerCase() === "template") {
+          return bindTemplate(el, ctx);
+        }
+
+        let attrs = [...(el.attributes || [])];
+        let children = [...(el.childNodes || [])];
+
+        if (el.nodeType === 3) {
+          let match;
+          while ((match = boundExp.exec(el.textContent)) !== null) {
+            bindValue(el, "textContent", match, ctx);
+          }
+        } else {
+          for (var i = 0; i < attrs.length; i++) {
+            if (attrExp.test(attrs[i].name)) {
+              bindAttribute(el, attrs[i].name, attrs[i].value, ctx);
+              // el.setAttribute(attrs[i].name.replace(":", ""), attrs[i].value);
             }
 
-            delete previous[id];
+            if (eventExp.test(attrs[i].name)) {
+              bindEvent(el, attrs[i].name, attrs[i].value, ctx);
+              // el.setAttribute(attrs[i].name);
+            }
           }
+        }
 
-          // If this the template is being rendered create bindings on the parent scope
-          el.parentNode.insertBefore(frag, el);
-        };
-
-        binding.attrs[`template-${templateIdx}`].bindings.push(fn);
-      } else if (type === "if") {
-        let conditionalFn = new Function(
-          `scope`,
-          `with(scope) {
-            return ${el.getAttribute(":if")}
-          }`,
-        );
-
-        // Create a child binding for this template
-        oCtx.__childbindings__.push({
-          el: el,
-          bindings: {},
+        children.map((c) => {
+          walk(c, ctx, log);
         });
+      };
 
-        // Create pass through observers
-        for (let key in oCtx.__observed__) {
-          oCtx.__observed__[key].push({
-            el: el,
-            snippet: null,
-            attr: `if-block-${templateIdx}`,
-            hidden: true,
-            context: oCtx,
-            bindings: [
-              (snippet, values, attr) => {
-                let child = oCtx.__childbindings__.find((b) => b.el === el);
-                let childBindings = child.bindings[key] || [];
+      walk(template, this);
+    }
 
-                for (let i = 0; i < childBindings.length; i++) {
-                  childBindings[i].context[key] = values[key];
-                }
-              },
-            ],
+    __get_values__(ctx) {
+      let values = {};
+      let methods = Object.getOwnPropertyNames(
+        Object.getPrototypeOf(Object.getPrototypeOf(this)),
+      ).filter((method) => {
+        return typeof this[method] === "function";
+      });
+
+      for (let i = 0; i < methods.length; i++) {
+        if (typeof this[methods[i]] === "function") {
+          Object.defineProperty(values, methods[i], {
+            get: () => {
+              return this[methods[i]].bind(this);
+            },
           });
         }
-
-        let fn = (snippet, values, attr) => {
-          // Get the iterator value;
-          let condtional = conditionalFn(values);
-
-          // Create a document fagment to append items to
-          let frag = document.createDocumentFragment();
-
-          // Get the previously created elements and context
-          let previous = binding.attrs[attr].previous["if-key"] || {
-            elements: [],
-            ctx: null,
-          };
-
-          let previouslyCreated = previous.elements;
-          let previousCtx = previous.ctx;
-
-          // Scoped variables
-          let created = [];
-          let createdCtx = null;
-          let child_bindings = {};
-
-          // Check if the test function is truthy
-          if (condtional) {
-            // Check if there is a previously created element and context
-            if (previouslyCreated.length > 0 && previousCtx !== null) {
-              // If so, all we need to do is update the values of the
-              // previously created context with the new values
-              updateTemplateContext(previousCtx, oCtx);
-              return;
-            } else {
-              // If not then we need to create the element and it's bindings
-
-              // Clone the template
-              let item = el.content.cloneNode(true);
-
-              // Create a new context
-              let ctx = createTemplateContext(oCtx, null, null, null);
-
-              // Parse the template
-              walk(item, ctx, true);
-
-              // Render the context
-              this.__render__(ctx);
-
-              // Keep track of created items
-              created.push(...item.childNodes);
-              createdCtx = ctx;
-
-              // append then render
-              frag.append(item);
-
-              // If this the template is being rendered create bindings on the parent scope
-              el.parentNode.insertBefore(frag, el);
-            }
-          } else {
-            for (let i = 0; i < previouslyCreated.length; i++) {
-              previouslyCreated[i].parentNode.removeChild(previouslyCreated[i]);
-            }
-          }
-
-          // Keep track of all the observers
-          for (let o in ctx.__observed__) {
-            if (child_bindings.hasOwnProperty(o)) {
-              child_bindings[o].push(...ctx.__observed__[o]);
-            } else {
-              child_bindings[o] = [...ctx.__observed__[o]];
-            }
-          }
-
-          // Replace the parent context's child bindings with the rendered bindings
-          let childIdx = oCtx.__childbindings__.findIndex((b) => b.el === el);
-          if (childIdx !== -1) {
-            oCtx.__childbindings__[childIdx].bindings = child_bindings;
-          }
-
-          // Set the created elements to be removed on the next render
-          binding.attrs[attr].previous["if-key"] = {
-            elements: created,
-            ctx: createdCtx,
-          };
-        };
-
-        binding.attrs[`template-${templateIdx}`].bindings.push(fn);
-      }
-    };
-
-    const walk = (el, ctx, log) => {
-      if (!!el.tagName && (el.tagName || "").toLowerCase() === "template") {
-        return bindTemplate(el, ctx);
       }
 
-      let attrs = [...(el.attributes || [])];
-      let children = [...(el.childNodes || [])];
-
-      if (el.nodeType === 3) {
-        let match;
-        while ((match = boundExp.exec(el.textContent)) !== null) {
-          bindValue(el, "textContent", match, ctx);
-        }
-      } else {
-        for (var i = 0; i < attrs.length; i++) {
-          if (attrExp.test(attrs[i].name)) {
-            bindAttribute(el, attrs[i].name, attrs[i].value, ctx);
-            // el.setAttribute(attrs[i].name.replace(":", ""), attrs[i].value);
-          }
-
-          if (eventExp.test(attrs[i].name)) {
-            bindEvent(el, attrs[i].name, attrs[i].value, ctx);
-            // el.setAttribute(attrs[i].name);
-          }
-        }
-      }
-
-      children.map((c) => {
-        walk(c, ctx, log);
-      });
-    };
-
-    walk(template, this);
-  }
-
-  __get_values__(ctx) {
-    let values = {};
-    let methods = Object.getOwnPropertyNames(
-      Object.getPrototypeOf(Object.getPrototypeOf(this)),
-    ).filter((method) => {
-      return typeof this[method] === "function";
-    });
-
-    for (let i = 0; i < methods.length; i++) {
-      if (typeof this[methods[i]] === "function") {
-        Object.defineProperty(values, methods[i], {
+      let keys = Object.keys(ctx.__observed__);
+      for (let i = 0; i < keys.length; i++) {
+        Object.defineProperty(values, keys[i], {
           get: () => {
-            return this[methods[i]].bind(this);
+            return ctx[keys[i]];
           },
         });
       }
+
+      return values;
     }
 
-    let keys = Object.keys(ctx.__observed__);
-    for (let i = 0; i < keys.length; i++) {
-      Object.defineProperty(values, keys[i], {
-        get: () => {
-          return ctx[keys[i]];
-        },
-      });
-    }
+    __render__(ctx, log) {
+      let values = ctx.__get_values__(ctx);
 
-    return values;
-  }
+      for (let i = 0; i < ctx.__bindings__.length; i++) {
+        let binding = ctx.__bindings__[i];
+        let el = binding.el;
 
-  __render__(ctx, log) {
-    let values = ctx.__get_values__(ctx);
+        for (let attr in binding.attrs) {
+          let { snippet, bindings } = binding.attrs[attr];
 
-    for (let i = 0; i < ctx.__bindings__.length; i++) {
-      let binding = ctx.__bindings__[i];
-      let el = binding.el;
+          ctx.__current_target__ = {
+            el,
+            attr,
+            snippet,
+            context: ctx,
+            bindings,
+          };
 
-      for (let attr in binding.attrs) {
-        let { snippet, bindings } = binding.attrs[attr];
+          for (let i = 0; i < bindings.length; i++) {
+            snippet = bindings[i](snippet, values, attr);
+          }
 
-        ctx.__current_target__ = { el, attr, snippet, context: ctx, bindings };
+          if (typeof snippet === "function") {
+            el[attr.replace(":", "")] = snippet.bind(this);
+          } else {
+            el[attr.replace(":", "")] = snippet;
+          }
 
-        for (let i = 0; i < bindings.length; i++) {
-          snippet = bindings[i](snippet, values, attr);
-        }
-
-        if (typeof snippet === "function") {
-          el[attr.replace(":", "")] = snippet.bind(this);
-        } else {
-          el[attr.replace(":", "")] = snippet;
-        }
-
-        if (!["array", "object", "function"].includes(typeof snippet)) {
-          if (!binding.hidden && !!el.setAttribute) {
-            el.setAttribute(attr.replace(":", ""), snippet);
+          if (!["array", "object", "function"].includes(typeof snippet)) {
+            if (!binding.hidden && !!el.setAttribute) {
+              el.setAttribute(attr.replace(":", ""), snippet);
+            }
           }
         }
       }
+
+      ctx.__current_target__ = null;
     }
-
-    // console.log(ctx.__bindings__);
-    // console.log(ctx.__observed__);
-
-    ctx.__current_target__ = null;
-  }
+  };
+} else {
+  BuildingBlocks = class BuildingBlocks {
+    constructor() {
+      console.warn("Building Blocks could ironically not be built");
+    }
+  };
 }
 
 // Simple subscribable storage, there's better out there you should probably use them
-class Context {
+export class ContextBlocks {
   constructor(obj) {
-    this.values = { ...obj };
-    this.subscriptions = Object.keys(obj).reduce((a, c) => {
+    this.__values__ = { ...obj };
+    this.__subscriptions__ = Object.keys(obj).reduce((a, c) => {
       a[c] = [];
       return a;
     }, {});
 
-    this.handles = {};
+    this.__handles__ = {};
+    this.__bindings__ = {};
 
     let props = Object.keys(obj);
     for (var i = 0; i < props.length; i++) {
@@ -652,14 +683,14 @@ class Context {
       var p = {};
       p[prop] = {
         get: () => {
-          return this.values[prop];
+          return this.__values__[prop];
         },
 
         set: (value) => {
-          const subscribers = this.subscriptions[prop];
-          const oldValue = this.values[prop];
+          const subscribers = this.__subscriptions__[prop];
+          const oldValue = this.__values__[prop];
 
-          this.values[prop] = value;
+          this.__values__[prop] = value;
           for (let i = 0; i < subscribers.length; i++) {
             subscribers[i](value, oldValue);
           }
@@ -670,14 +701,49 @@ class Context {
     }
   }
 
+  toJSON() {
+    return this.__values__;
+  }
+
+  bind(element, key, fn) {
+    if (!this.__subscriptions__.hasOwnProperty(key)) {
+      console.warn(`Can not bind ${element} to ${key}: no such key exists`);
+      return;
+    }
+
+    if (!element.isConnected) {
+      console.log(
+        `Can not bind ${element} to ${key}: the element is not connected to the DOM`,
+      );
+      return;
+    }
+
+    let wrapped = (newValue, oldValue) => {
+      if (!element.isConnected) {
+        this.__subscriptions__[key] = this.__subscriptions__[key].filter(
+          (s) => {
+            return s !== wrapped;
+          },
+        );
+
+        return;
+      }
+
+      fn(newValue, oldValue);
+    };
+
+    this.__subscriptions__[key].push(wrapped);
+    wrapped(this.__values__[key], null);
+  }
+
   listen(key, fn, handle) {
-    if (!this.subscriptions.hasOwnProperty(key)) {
+    if (!this.__subscriptions__.hasOwnProperty(key)) {
       console.log("Can not subscribe, no key exists");
       return;
     }
 
     if (!!handle) {
-      if (this.handles.hasOwnProperty(handle)) {
+      if (this.__handles__.hasOwnProperty(handle)) {
         console.warn(
           `handle ${handle} already exists, you may be trying to subscribe more than once`,
         );
@@ -689,22 +755,22 @@ class Context {
       // );
     }
 
-    this.subscriptions[key].push(fn);
+    this.__subscriptions__[key].push(fn);
 
     if (!!handle) {
-      this.handles[handle] = fn;
+      this.__handles__[handle] = fn;
     }
   }
 
   unlisten(key, fn, handle) {
     if (!!handle) {
-      fn = this.handles[handle];
+      fn = this.__handles__[handle];
     }
 
-    let idx = this.subscriptions[key].findIndex((f) => f === fn);
+    let idx = this.__subscriptions__[key].findIndex((f) => f === fn);
 
     if (idx !== -1) {
-      this.subscriptions.splice(idx, 1);
+      this.__subscriptions__.splice(idx, 1);
     }
   }
 
@@ -714,20 +780,20 @@ class Context {
       return;
     }
 
-    this.values[prop] = value;
-    this.subscriptions[prop] = [];
+    this.__values__[prop] = value;
+    this.__subscriptions__[prop] = [];
 
     var p = {};
     p[prop] = {
       get: () => {
-        return this.values[prop];
+        return this.__values__[prop];
       },
 
       set: (value) => {
-        const subscribers = this.subscriptions[prop];
-        const oldValue = this.values[prop];
+        const subscribers = this.__subscriptions__[prop];
+        const oldValue = this.__values__[prop];
 
-        this.values[prop] = value;
+        this.__values__[prop] = value;
         for (let i = 0; i < subscribers.length; i++) {
           subscribers(value, oldValue);
         }
@@ -737,5 +803,3 @@ class Context {
     Object.defineProperties(this, p);
   }
 }
-
-export { BuildingBlocks as default };

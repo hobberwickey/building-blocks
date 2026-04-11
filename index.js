@@ -12,7 +12,7 @@ if (typeof HTMLElement !== "undefined") {
 
       // Context Variables
       this.__bindings__ = [];
-      this.__childbindings__ = [];
+      this.__childContexts__ = {};
       this.__observed__ = {};
       this.__values__ = {};
       this.__current_target__ = null;
@@ -149,6 +149,12 @@ if (typeof HTMLElement !== "undefined") {
       }
     }
 
+    disconnectedCallback() {
+      if (!!this.disconnected) {
+        this.disconnected();
+      }
+    }
+
     __parseTemplate__(template, ctx) {
       const eventExp = /\@([a-z|A-Z]+)/;
       const attrExp = /\:([a-z|A-Z]+)/;
@@ -243,12 +249,13 @@ if (typeof HTMLElement !== "undefined") {
         let values = {};
 
         let ctx = {
+          __id__: (Math.random() * 10000000) | 0,
           __bindings__: [],
           __observed__: {},
           __childbindings__: [],
+          __childContexts__: {},
           __values__: values,
           __template__: null,
-          __current_target: null,
           __parent__: oCtx,
           __current_target__: null,
 
@@ -326,16 +333,13 @@ if (typeof HTMLElement !== "undefined") {
             oCtx.__observed__[key].push({
               el: el,
               snippet: null,
-              attr: "for-loop",
+              attr: `for-loop-${templateIdx}`,
               hidden: true,
               context: oCtx,
               bindings: [
                 (snippet, values) => {
-                  let child = oCtx.__childbindings__.find((b) => b.el === el);
-                  let childBindings = child.bindings[key] || [];
-
-                  for (let i = 0; i < childBindings.length; i++) {
-                    childBindings[i].context[key] = values[key];
+                  for (let x in oCtx.__childContexts__) {
+                    oCtx.__childContexts__[x][key] = values[key];
                   }
                 },
               ],
@@ -356,19 +360,24 @@ if (typeof HTMLElement !== "undefined") {
 
             if (!!iterator) {
               let idx = 0;
-              let child_bindings = {};
+              // let child_bindings = {};
+              let child_contexts = [];
               for (let key in iterator) {
                 // Create a new context, evaluate the idFunction with it
                 let ctx = createTemplateContext(oCtx, idx, key, iterator[key]);
                 let ctxValues = ctx.__get_values__(ctx);
                 let id = idFunction(ctxValues).toString();
 
+                child_contexts.push(ctx);
                 if (previousIds.includes(id)) {
                   updateTemplateContext(previous[id].ctx, ctx);
                   deletedIds = deletedIds.filter((_id) => _id !== id);
                   idx++;
+
                   continue;
                 }
+
+                oCtx.__childContexts__[`${templateIdx}-${id}`] = ctx;
 
                 // Clone the template
                 let created = [];
@@ -380,20 +389,15 @@ if (typeof HTMLElement !== "undefined") {
                 // Render the context
                 this.__render__(ctx, true);
 
+                if (this.tagName === "MAIN-LAYOUT") {
+                  console.log("Context", ctx);
+                }
+
                 // Keep track of created items
                 created.push(...item.childNodes);
 
                 // append then render
                 frag.append(item);
-
-                // Keep track of all the observers
-                for (let o in ctx.__observed__) {
-                  if (child_bindings.hasOwnProperty(o)) {
-                    child_bindings[o].push(...ctx.__observed__[o]);
-                  } else {
-                    child_bindings[o] = [...ctx.__observed__[o]];
-                  }
-                }
 
                 // Store the created elements and context under the id
                 previous[id] = {
@@ -403,14 +407,6 @@ if (typeof HTMLElement !== "undefined") {
                 // increment the index
                 idx++;
               }
-
-              // Replace the parent context's child bindings with the rendered bindings
-              let childIdx = oCtx.__childbindings__.findIndex(
-                (b) => b.el === el,
-              );
-              if (childIdx !== -1) {
-                oCtx.__childbindings__[childIdx].bindings = child_bindings;
-              }
             }
 
             // Set the created elements to be removed on the next render
@@ -418,15 +414,18 @@ if (typeof HTMLElement !== "undefined") {
               let id = deletedIds[i];
               let doomed = previous[id].elements;
               for (let j = 0; j < doomed.length; j++) {
-                doomed[j].parentNode.removeChild(doomed[j]);
+                doomed[j].remove();
               }
 
+              delete oCtx.__childContexts__[`${templateIdx}-${id}`];
               delete previous[id];
             }
 
             // If this the template is being rendered create bindings on the parent scope
             el.parentNode.insertBefore(frag, el);
           };
+
+          console.log(oCtx.__childContexts__);
 
           binding.attrs[`template-${templateIdx}`].bindings.push(fn);
         } else if (type === "if") {
@@ -453,11 +452,8 @@ if (typeof HTMLElement !== "undefined") {
               context: oCtx,
               bindings: [
                 (snippet, values, attr) => {
-                  let child = oCtx.__childbindings__.find((b) => b.el === el);
-                  let childBindings = child.bindings[key] || [];
-
-                  for (let i = 0; i < childBindings.length; i++) {
-                    childBindings[i].context[key] = values[key];
+                  for (let x in oCtx.__childContexts__) {
+                    oCtx.__childContexts__[x][key] = values[key];
                   }
                 },
               ],
@@ -466,7 +462,7 @@ if (typeof HTMLElement !== "undefined") {
 
           let fn = (snippet, values, attr) => {
             // Get the iterator value;
-            let condtional = conditionalFn(values);
+            let conditional = conditionalFn(values);
 
             // Create a document fagment to append items to
             let frag = document.createDocumentFragment();
@@ -483,15 +479,15 @@ if (typeof HTMLElement !== "undefined") {
             // Scoped variables
             let created = [];
             let createdCtx = null;
-            let child_bindings = {};
+            // let child_bindings = {};
 
             // Check if the test function is truthy
-            if (condtional) {
+            if (conditional) {
               // Check if there is a previously created element and context
               if (previouslyCreated.length > 0 && previousCtx !== null) {
                 // If so, all we need to do is update the values of the
                 // previously created context with the new values
-                updateTemplateContext(previousCtx, oCtx);
+                updateTemplateContext(previousCtx, ctx);
                 return;
               } else {
                 // If not then we need to create the element and it's bindings
@@ -501,6 +497,8 @@ if (typeof HTMLElement !== "undefined") {
 
                 // Create a new context
                 let ctx = createTemplateContext(oCtx, null, null, null);
+
+                oCtx.__childContexts__[`if-block-${templateIdx}`] = ctx;
 
                 // Parse the template
                 walk(item, ctx, true);
@@ -519,26 +517,11 @@ if (typeof HTMLElement !== "undefined") {
                 el.parentNode.insertBefore(frag, el);
               }
             } else {
+              delete oCtx.__childContexts__[`if-block-${templateIdx}`];
+
               for (let i = 0; i < previouslyCreated.length; i++) {
-                previouslyCreated[i].parentNode.removeChild(
-                  previouslyCreated[i],
-                );
+                previouslyCreated[i].remove();
               }
-            }
-
-            // Keep track of all the observers
-            for (let o in ctx.__observed__) {
-              if (child_bindings.hasOwnProperty(o)) {
-                child_bindings[o].push(...ctx.__observed__[o]);
-              } else {
-                child_bindings[o] = [...ctx.__observed__[o]];
-              }
-            }
-
-            // Replace the parent context's child bindings with the rendered bindings
-            let childIdx = oCtx.__childbindings__.findIndex((b) => b.el === el);
-            if (childIdx !== -1) {
-              oCtx.__childbindings__[childIdx].bindings = child_bindings;
             }
 
             // Set the created elements to be removed on the next render
@@ -549,6 +532,8 @@ if (typeof HTMLElement !== "undefined") {
           };
 
           binding.attrs[`template-${templateIdx}`].bindings.push(fn);
+
+          console.log(oCtx.__childContexts__);
         }
       };
 

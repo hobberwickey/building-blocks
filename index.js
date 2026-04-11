@@ -12,7 +12,7 @@ if (typeof HTMLElement !== "undefined") {
 
       // Context Variables
       this.__bindings__ = [];
-      this.__childContexts__ = {};
+      this.__childcontexts__ = {};
       this.__observed__ = {};
       this.__values__ = {};
       this.__current_target__ = null;
@@ -253,7 +253,7 @@ if (typeof HTMLElement !== "undefined") {
           __bindings__: [],
           __observed__: {},
           __childbindings__: [],
-          __childContexts__: {},
+          __childcontexts__: {},
           __values__: values,
           __template__: null,
           __parent__: oCtx,
@@ -322,12 +322,6 @@ if (typeof HTMLElement !== "undefined") {
             }`,
           );
 
-          // Create a child binding for this template
-          oCtx.__childbindings__.push({
-            el: el,
-            bindings: {},
-          });
-
           // Create pass through observers
           for (let key in oCtx.__observed__) {
             oCtx.__observed__[key].push({
@@ -338,8 +332,8 @@ if (typeof HTMLElement !== "undefined") {
               context: oCtx,
               bindings: [
                 (snippet, values) => {
-                  for (let x in oCtx.__childContexts__) {
-                    oCtx.__childContexts__[x][key] = values[key];
+                  for (let x in oCtx.__childcontexts__) {
+                    oCtx.__childcontexts__[x][key] = values[key];
                   }
                 },
               ],
@@ -377,7 +371,7 @@ if (typeof HTMLElement !== "undefined") {
                   continue;
                 }
 
-                oCtx.__childContexts__[`${templateIdx}-${id}`] = ctx;
+                oCtx.__childcontexts__[`${templateIdx}-${id}`] = ctx;
 
                 // Clone the template
                 let created = [];
@@ -388,10 +382,6 @@ if (typeof HTMLElement !== "undefined") {
 
                 // Render the context
                 this.__render__(ctx, true);
-
-                if (this.tagName === "MAIN-LAYOUT") {
-                  console.log("Context", ctx);
-                }
 
                 // Keep track of created items
                 created.push(...item.childNodes);
@@ -417,15 +407,13 @@ if (typeof HTMLElement !== "undefined") {
                 doomed[j].remove();
               }
 
-              delete oCtx.__childContexts__[`${templateIdx}-${id}`];
+              delete oCtx.__childcontexts__[`${templateIdx}-${id}`];
               delete previous[id];
             }
 
             // If this the template is being rendered create bindings on the parent scope
             el.parentNode.insertBefore(frag, el);
           };
-
-          console.log(oCtx.__childContexts__);
 
           binding.attrs[`template-${templateIdx}`].bindings.push(fn);
         } else if (type === "if") {
@@ -435,12 +423,6 @@ if (typeof HTMLElement !== "undefined") {
               return ${el.getAttribute(":if")}
             }`,
           );
-
-          // Create a child binding for this template
-          oCtx.__childbindings__.push({
-            el: el,
-            bindings: {},
-          });
 
           // Create pass through observers
           for (let key in oCtx.__observed__) {
@@ -452,8 +434,8 @@ if (typeof HTMLElement !== "undefined") {
               context: oCtx,
               bindings: [
                 (snippet, values, attr) => {
-                  for (let x in oCtx.__childContexts__) {
-                    oCtx.__childContexts__[x][key] = values[key];
+                  for (let x in oCtx.__childcontexts__) {
+                    oCtx.__childcontexts__[x][key] = values[key];
                   }
                 },
               ],
@@ -498,7 +480,7 @@ if (typeof HTMLElement !== "undefined") {
                 // Create a new context
                 let ctx = createTemplateContext(oCtx, null, null, null);
 
-                oCtx.__childContexts__[`if-block-${templateIdx}`] = ctx;
+                oCtx.__childcontexts__[`if-block-${templateIdx}`] = ctx;
 
                 // Parse the template
                 walk(item, ctx, true);
@@ -517,7 +499,7 @@ if (typeof HTMLElement !== "undefined") {
                 el.parentNode.insertBefore(frag, el);
               }
             } else {
-              delete oCtx.__childContexts__[`if-block-${templateIdx}`];
+              delete oCtx.__childcontexts__[`if-block-${templateIdx}`];
 
               for (let i = 0; i < previouslyCreated.length; i++) {
                 previouslyCreated[i].remove();
@@ -532,8 +514,6 @@ if (typeof HTMLElement !== "undefined") {
           };
 
           binding.attrs[`template-${templateIdx}`].bindings.push(fn);
-
-          console.log(oCtx.__childContexts__);
         }
       };
 
@@ -697,7 +677,7 @@ export class ContextBlocks {
     }
 
     if (!element.isConnected) {
-      console.log(
+      console.warn(
         `Can not bind ${element} to ${key}: the element is not connected to the DOM`,
       );
       return;

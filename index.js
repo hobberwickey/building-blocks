@@ -264,9 +264,9 @@ if (typeof HTMLElement !== "undefined") {
           },
         };
 
-        for (var key in oCtx.__observed__) {
-          ctx[key] = oCtx[key];
-          this.observe(key, ctx);
+        for (let _key in oCtx.__observed__) {
+          ctx[_key] = oCtx[_key];
+          this.observe(_key, ctx);
         }
 
         ctx["$idx"] = idx;
@@ -477,8 +477,17 @@ if (typeof HTMLElement !== "undefined") {
                 // Clone the template
                 let item = el.content.cloneNode(true);
 
+                if (this.tagName === "FOLDER-LIST") {
+                  oCtx;
+                }
+
                 // Create a new context
-                let ctx = createTemplateContext(oCtx, null, null, null);
+                let ctx = createTemplateContext(
+                  oCtx,
+                  oCtx.$idx || null,
+                  oCtx.$key || null,
+                  oCtx.$value || null,
+                );
 
                 oCtx.__childcontexts__[`if-block-${templateIdx}`] = ctx;
 

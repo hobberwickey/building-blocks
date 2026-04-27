@@ -245,7 +245,7 @@ if (typeof HTMLElement !== "undefined") {
         });
       };
 
-      const createTemplateContext = (oCtx, idx, key, value) => {
+      const createTemplateContext = (oCtx, idx, key, value, aliases) => {
         let values = {};
 
         let ctx = {
@@ -269,12 +269,29 @@ if (typeof HTMLElement !== "undefined") {
           this.observe(_key, ctx);
         }
 
-        ctx["$idx"] = idx;
-        this.observe("$idx", ctx);
-        ctx["$key"] = key;
-        this.observe("$key", ctx);
-        ctx["$value"] = value;
-        this.observe("$value", ctx);
+        if (!!aliases.$idx) {
+          ctx[aliases.$idx] = idx;
+          this.observe(aliases.$idx, ctx);
+        } else {
+          ctx["$idx"] = idx;
+          this.observe("$idx", ctx);
+        }
+
+        if (!!aliases.$key) {
+          ctx[aliases.$key] = key;
+          this.observe(aliases.$key, ctx);
+        } else {
+          ctx["$key"] = key;
+          this.observe("$key", ctx);
+        }
+
+        if (!!aliases.$value) {
+          ctx[aliases.$value] = value;
+          this.observe(aliases.$value, ctx);
+        } else {
+          ctx["$value"] = value;
+          this.observe("$value", ctx);
+        }
 
         // console.log(ctx)
 
@@ -291,6 +308,23 @@ if (typeof HTMLElement !== "undefined") {
         let templateIdx = [
           ...el.parentNode.querySelectorAll("template"),
         ].indexOf(el);
+
+        let idxAlias = el.getAttribute("$idx") || "";
+        let keyAlias = el.getAttribute("$key") || "";
+        let valueAlias = el.getAttribute("$value") || "";
+
+        let aliases = {};
+        if (!!idxAlias) {
+          aliases.$idx = idxAlias;
+        }
+
+        if (!!keyAlias) {
+          aliases.$key = keyAlias;
+        }
+
+        if (!!valueAlias) {
+          aliases.$value = valueAlias;
+        }
 
         let binding = getBinding(
           el.parentNode,
@@ -358,7 +392,13 @@ if (typeof HTMLElement !== "undefined") {
               let child_contexts = [];
               for (let key in iterator) {
                 // Create a new context, evaluate the idFunction with it
-                let ctx = createTemplateContext(oCtx, idx, key, iterator[key]);
+                let ctx = createTemplateContext(
+                  oCtx,
+                  idx,
+                  key,
+                  iterator[key],
+                  aliases,
+                );
                 let ctxValues = ctx.__get_values__(ctx);
                 let id = idFunction(ctxValues).toString();
 
@@ -487,6 +527,7 @@ if (typeof HTMLElement !== "undefined") {
                   oCtx.$idx || null,
                   oCtx.$key || null,
                   oCtx.$value || null,
+                  aliases,
                 );
 
                 oCtx.__childcontexts__[`if-block-${templateIdx}`] = ctx;

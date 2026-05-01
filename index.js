@@ -108,7 +108,11 @@ if (typeof HTMLElement !== "undefined") {
               if (typeof snippet === "function") {
                 el[attr.replace(":", "")] = snippet.bind(this);
               } else {
-                el[attr.replace(":", "")] = snippet;
+                if (["USE", "use"].includes(el.tagName)) {
+                  el.setAttribute(attr.replace(":", ""), snippet);
+                } else {
+                  el[attr.replace(":", "")] = snippet;
+                }
               }
 
               if (!["array", "object", "function"].includes(typeof snippet)) {
@@ -657,7 +661,11 @@ if (typeof HTMLElement !== "undefined") {
           if (typeof snippet === "function") {
             el[attr.replace(":", "")] = snippet.bind(this);
           } else {
-            el[attr.replace(":", "")] = snippet;
+            if (["USE", "use"].includes(el.tagName)) {
+              el.setAttribute(attr.replace(":", ""), snippet);
+            } else {
+              el[attr.replace(":", "")] = snippet;
+            }
           }
 
           if (!["array", "object", "function"].includes(typeof snippet)) {
@@ -747,6 +755,49 @@ export class ContextBlocks {
       fn(newValue, oldValue);
     };
 
+    this.__subscriptions__[key].push(wrapped);
+    wrapped(this.__values__[key], null);
+  }
+
+  bindOnce(element, key, fn) {
+    if (!this.__subscriptions__.hasOwnProperty(key)) {
+      console.warn(`Can not bind ${element} to ${key}: no such key exists`);
+      return;
+    }
+
+    if (!element.isConnected) {
+      console.warn(
+        `Can not bind ${element} to ${key}: the element is not connected to the DOM`,
+      );
+      return;
+    }
+
+    let wrapped = (newValue, oldValue) => {
+      if (!element.isConnected) {
+        this.__subscriptions__[key] = this.__subscriptions__[key].filter(
+          (s) => {
+            return s !== wrapped;
+          },
+        );
+
+        this.__bindings__ = this.__bindings__.filter((e) => e !== element);
+
+        return;
+      }
+
+      fn(newValue, oldValue);
+    };
+
+    if (!this.__bindings__[key]) {
+      this.__bindings__[key] = [];
+    }
+
+    let binding = this.__bindings__[key].find((e) => e === element);
+    if (!!binding) {
+      return;
+    }
+
+    this.__bindings__[key].push(element);
     this.__subscriptions__[key].push(wrapped);
     wrapped(this.__values__[key], null);
   }

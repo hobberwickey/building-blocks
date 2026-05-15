@@ -22,7 +22,7 @@ if (typeof HTMLElement !== "undefined") {
       return [];
     }
 
-    listen(key, fn) {
+    listen(key, fn, handle) {
       const uuid = () => {
         return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) =>
           (
@@ -32,7 +32,7 @@ if (typeof HTMLElement !== "undefined") {
         );
       };
 
-      let handle = uuid();
+      handle = handle || uuid();
       if (this.__observed__.hasOwnProperty(key)) {
         let observers = this.__observed__[key];
         let idx = observers.findIndex(
@@ -695,8 +695,11 @@ export class ContextBlocks {
       a[c] = [];
       return a;
     }, {});
+    this.__handles__ = Object.keys(obj).reduce((a, c) => {
+      a[c] = [];
+      return a;
+    }, {});
 
-    this.__handles__ = {};
     this.__bindings__ = {};
 
     let props = Object.keys(obj);
@@ -809,28 +812,29 @@ export class ContextBlocks {
     }
 
     if (!!handle) {
-      if (this.__handles__.hasOwnProperty(handle)) {
-        console.warn(
-          `handle ${handle} already exists, you may be trying to subscribe more than once`,
+      if (this.__handles__[key].hasOwnProperty(handle)) {
+        let idx = this.__subscriptions__[key].indexOf(
+          this.__handles__[key][handle],
         );
-        return;
+        if (idx !== -1) {
+          console.log("Replacing Handle", key, handle);
+          this.__subscriptions__[key].splice(idx, 1, fn);
+        } else {
+          throw "Handle found with no corresponding subscription";
+        }
       }
-    } else {
-      // console.warn(
-      //   `it is highly recommended you use a handler when subscribing`,
-      // );
     }
 
     this.__subscriptions__[key].push(fn);
 
     if (!!handle) {
-      this.__handles__[handle] = fn;
+      this.__handles__[key][handle] = fn;
     }
   }
 
   unlisten(key, fn, handle) {
     if (!!handle) {
-      fn = this.__handles__[handle];
+      fn = this.__handles__[key][handle];
     }
 
     let idx = this.__subscriptions__[key].findIndex((f) => f === fn);

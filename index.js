@@ -1,6 +1,8 @@
 // Just in case this is getting loaded in a context without HTMLElement
 export let BuildingBlocks;
 
+const booleanAttrs = ["disabled"];
+
 if (typeof HTMLElement !== "undefined") {
   BuildingBlocks = class BuildingBlocks extends HTMLElement {
     constructor() {
@@ -105,19 +107,25 @@ if (typeof HTMLElement !== "undefined") {
                 snippet = bindings[i](snippet, values, attr);
               }
 
+              let parsedAttr = attr.replace(":", "");
+
               if (typeof snippet === "function") {
                 el[attr.replace(":", "")] = snippet.bind(this);
               } else {
                 if (["USE", "use"].includes(el.tagName)) {
-                  el.setAttribute(attr.replace(":", ""), snippet);
+                  el.setAttribute(parsedAttr, snippet);
                 } else {
-                  el[attr.replace(":", "")] = snippet;
+                  el[parsedAttr] = snippet;
                 }
               }
 
               if (!["array", "object", "function"].includes(typeof snippet)) {
                 if (!hidden && !!el.setAttribute) {
-                  el.setAttribute(attr.replace(":", ""), snippet);
+                  if (booleanAttrs.includes(parsedAttr) && !snippet) {
+                    el.removeAttribute(parsedAttr);
+                  } else {
+                    el.setAttribute(parsedAttr, snippet);
+                  }
                 }
               }
             }
@@ -348,7 +356,7 @@ if (typeof HTMLElement !== "undefined") {
           let idSnippet = el.getAttribute(":id");
           if (!idSnippet) {
             console.warn(
-              "For loop templates must have an :id, index is being used as a default but that could result in unnecessary reredeners",
+              `For loop templates must have an :id, index is being used as a default but that could result in unnecessary reredeners ${this.tagName}`,
             );
             idSnippet = "$idx";
           }
@@ -390,6 +398,10 @@ if (typeof HTMLElement !== "undefined") {
             let previousIds = Object.keys(previous);
             let deletedIds = Object.keys(previous);
 
+            if (this.tagName === "VIDEO-SLOT") {
+              console.log(this.tagName, iterator);
+            }
+
             if (!!iterator) {
               let idx = 0;
               // let child_bindings = {};
@@ -411,6 +423,12 @@ if (typeof HTMLElement !== "undefined") {
                   updateTemplateContext(previous[id].ctx, ctx);
                   deletedIds = deletedIds.filter((_id) => _id !== id);
                   idx++;
+
+                  // Move the existing item into the frag to maintain order
+                  let elements = previous[id].elements;
+                  for (let elIdx = 0; elIdx < elements.length; elIdx++) {
+                    frag.appendChild(elements[elIdx]);
+                  }
 
                   continue;
                 }
@@ -442,6 +460,8 @@ if (typeof HTMLElement !== "undefined") {
                 idx++;
               }
             }
+
+            // console.log(previous, deletedIds)
 
             // Set the created elements to be removed on the next render
             for (let i = 0; i < deletedIds.length; i++) {
@@ -658,19 +678,27 @@ if (typeof HTMLElement !== "undefined") {
             snippet = bindings[i](snippet, values, attr);
           }
 
+          let parsedAttr = attr.replace(":", "");
           if (typeof snippet === "function") {
-            el[attr.replace(":", "")] = snippet.bind(this);
+            el[parsedAttr] = snippet.bind(this);
           } else {
             if (["USE", "use"].includes(el.tagName)) {
-              el.setAttribute(attr.replace(":", ""), snippet);
+              el.setAttribute(parsedAttr, snippet);
             } else {
-              el[attr.replace(":", "")] = snippet;
+              el[parsedAttr] = snippet;
             }
           }
 
           if (!["array", "object", "function"].includes(typeof snippet)) {
             if (!binding.hidden && !!el.setAttribute) {
-              el.setAttribute(attr.replace(":", ""), snippet);
+              // if (booleanAttrs.includes(parsedAttr)) {
+              //   console.log(snippet)
+              // }
+              if (booleanAttrs.includes(parsedAttr) && !snippet) {
+                el.removeAttribute(parsedAttr);
+              } else {
+                el.setAttribute(parsedAttr, snippet);
+              }
             }
           }
         }
@@ -807,7 +835,7 @@ export class ContextBlocks {
 
   listen(key, fn, handle) {
     if (!this.__subscriptions__.hasOwnProperty(key)) {
-      console.log("Can not subscribe, no key exists");
+      console.warn("Can not subscribe, no key exists");
       return;
     }
 
@@ -817,7 +845,6 @@ export class ContextBlocks {
           this.__handles__[key][handle],
         );
         if (idx !== -1) {
-          console.log("Replacing Handle", key, handle);
           this.__subscriptions__[key].splice(idx, 1, fn);
         } else {
           throw "Handle found with no corresponding subscription";

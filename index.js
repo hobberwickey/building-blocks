@@ -1,7 +1,7 @@
 // Just in case this is getting loaded in a context without HTMLElement
 export let BuildingBlocks;
 
-const booleanAttrs = ["disabled"];
+const booleanAttrs = ["disabled", "checked"];
 
 if (typeof HTMLElement !== "undefined") {
   BuildingBlocks = class BuildingBlocks extends HTMLElement {
@@ -98,13 +98,13 @@ if (typeof HTMLElement !== "undefined") {
             let observers = ctx.__observed__[prop] || [];
             let len = observers.length;
 
-            for (var i = 0; i < len; i++) {
+            for (let i = 0; i < len; i++) {
               let { el, attr, hidden, snippet, context, bindings } =
                 observers[i];
               let values = context.__get_values__(ctx);
 
-              for (let i = 0; i < bindings.length; i++) {
-                snippet = bindings[i](snippet, values, attr);
+              for (let j = 0; j < bindings.length; j++) {
+                snippet = bindings[j](snippet, values, attr);
               }
 
               let parsedAttr = attr.replace(":", "");
@@ -121,8 +121,14 @@ if (typeof HTMLElement !== "undefined") {
 
               if (!["array", "object", "function"].includes(typeof snippet)) {
                 if (!hidden && !!el.setAttribute) {
-                  if (booleanAttrs.includes(parsedAttr) && !snippet) {
-                    el.removeAttribute(parsedAttr);
+                  if (booleanAttrs.includes(parsedAttr)) {
+                    if (!!snippet) {
+                      el.setAttribute(parsedAttr, "true");
+                      el[parsedAttr] = true;
+                    } else {
+                      el.removeAttribute(parsedAttr);
+                      el[parsedAttr] = false;
+                    }
                   } else {
                     el.setAttribute(parsedAttr, snippet);
                   }
@@ -199,7 +205,7 @@ if (typeof HTMLElement !== "undefined") {
           binding.attrs[attr] = {
             snippet: snippet,
             bindings: [],
-            previous: {},
+            previous: [],
           };
         }
 
@@ -305,8 +311,6 @@ if (typeof HTMLElement !== "undefined") {
           this.observe("$value", ctx);
         }
 
-        // console.log(ctx)
-
         return ctx;
       };
 
@@ -390,17 +394,17 @@ if (typeof HTMLElement !== "undefined") {
             // Get the iterator value;
             let iterator = iteratorFn(values);
 
-            // Create a document fagment to append items to
-            let frag = document.createDocumentFragment();
-
             // Remove all any elements created from a previous call
             let previous = binding.attrs[attr].previous;
-            let previousIds = Object.keys(previous);
-            let deletedIds = Object.keys(previous);
+            let previousEls = previous.reduce((a, c) => {
+              a[c.id] = c;
+              return a;
+            }, {});
+            let previousIds = previous.map((p) => p.id);
+            let deletedIds = previous.map((p) => p.id);
 
-            if (this.tagName === "VIDEO-SLOT") {
-              console.log(this.tagName, iterator);
-            }
+            let current = [];
+            let lastElement = el;
 
             if (!!iterator) {
               let idx = 0;
@@ -419,16 +423,21 @@ if (typeof HTMLElement !== "undefined") {
                 let id = idFunction(ctxValues).toString();
 
                 child_contexts.push(ctx);
-                if (previousIds.includes(id)) {
-                  updateTemplateContext(previous[id].ctx, ctx);
+                if (previousEls[id]) {
+                  updateTemplateContext(previousEls[id].ctx, ctx);
                   deletedIds = deletedIds.filter((_id) => _id !== id);
-                  idx++;
 
-                  // Move the existing item into the frag to maintain order
-                  let elements = previous[id].elements;
-                  for (let elIdx = 0; elIdx < elements.length; elIdx++) {
-                    frag.appendChild(elements[elIdx]);
+                  let elements = previousEls[id].elements;
+                  if (previousIds.indexOf(id) !== idx) {
+                    // Move the existing item into the frag to maintain order
+                    for (let elIdx = 0; elIdx < elements.length; elIdx++) {
+                      lastElement.after(...elements);
+                    }
                   }
+
+                  lastElement = elements[elements.length - 1];
+                  current.push(previousEls[id]);
+                  idx++;
 
                   continue;
                 }
@@ -449,34 +458,34 @@ if (typeof HTMLElement !== "undefined") {
                 created.push(...item.childNodes);
 
                 // append then render
-                frag.append(item);
+                lastElement.after(item);
+                lastElement = created[created.length - 1];
+                // el.parentNode.insertBefore(item, el)
+                // frag.append(item);
 
                 // Store the created elements and context under the id
-                previous[id] = {
+                current.push({
+                  id: id,
                   elements: created,
                   ctx: ctx,
-                };
+                });
                 // increment the index
                 idx++;
               }
             }
 
-            // console.log(previous, deletedIds)
-
             // Set the created elements to be removed on the next render
             for (let i = 0; i < deletedIds.length; i++) {
               let id = deletedIds[i];
-              let doomed = previous[id].elements;
+              let doomed = previousEls[id].elements;
               for (let j = 0; j < doomed.length; j++) {
                 doomed[j].remove();
               }
 
               delete oCtx.__childcontexts__[`${templateIdx}-${id}`];
-              delete previous[id];
             }
 
-            // If this the template is being rendered create bindings on the parent scope
-            el.parentNode.insertBefore(frag, el);
+            binding.attrs[attr].previous = current;
           };
 
           binding.attrs[`template-${templateIdx}`].bindings.push(fn);
@@ -514,7 +523,8 @@ if (typeof HTMLElement !== "undefined") {
             let frag = document.createDocumentFragment();
 
             // Get the previously created elements and context
-            let previous = binding.attrs[attr].previous["if-key"] || {
+            let previous = binding.attrs[attr].previous[0] || {
+              id: "if-key",
               elements: [],
               ctx: null,
             };
@@ -540,10 +550,6 @@ if (typeof HTMLElement !== "undefined") {
 
                 // Clone the template
                 let item = el.content.cloneNode(true);
-
-                if (this.tagName === "FOLDER-LIST") {
-                  oCtx;
-                }
 
                 // Create a new context
                 let ctx = createTemplateContext(
@@ -581,10 +587,13 @@ if (typeof HTMLElement !== "undefined") {
             }
 
             // Set the created elements to be removed on the next render
-            binding.attrs[attr].previous["if-key"] = {
-              elements: created,
-              ctx: createdCtx,
-            };
+            binding.attrs[attr].previous = [
+              {
+                id: "if-key",
+                elements: created,
+                ctx: createdCtx,
+              },
+            ];
           };
 
           binding.attrs[`template-${templateIdx}`].bindings.push(fn);
@@ -691,11 +700,14 @@ if (typeof HTMLElement !== "undefined") {
 
           if (!["array", "object", "function"].includes(typeof snippet)) {
             if (!binding.hidden && !!el.setAttribute) {
-              // if (booleanAttrs.includes(parsedAttr)) {
-              //   console.log(snippet)
-              // }
-              if (booleanAttrs.includes(parsedAttr) && !snippet) {
-                el.removeAttribute(parsedAttr);
+              if (booleanAttrs.includes(parsedAttr)) {
+                if (!!snippet) {
+                  el.setAttribute(parsedAttr, "true");
+                  el[parsedAttr] = true;
+                } else {
+                  el.removeAttribute(parsedAttr);
+                  el[parsedAttr] = false;
+                }
               } else {
                 el.setAttribute(parsedAttr, snippet);
               }

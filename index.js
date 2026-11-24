@@ -104,6 +104,7 @@ if (typeof HTMLElement !== "undefined") {
               let values = context.__get_values__(ctx);
 
               for (let j = 0; j < bindings.length; j++) {
+                // console.log(j, bindings[j])
                 snippet = bindings[j](snippet, values, attr);
               }
 
@@ -311,6 +312,8 @@ if (typeof HTMLElement !== "undefined") {
           this.observe("$value", ctx);
         }
 
+        // console.log(ctx)
+
         return ctx;
       };
 
@@ -427,11 +430,13 @@ if (typeof HTMLElement !== "undefined") {
                   updateTemplateContext(previousEls[id].ctx, ctx);
                   deletedIds = deletedIds.filter((_id) => _id !== id);
 
+                  // console.log(id, previousIds, previousIds.indexOf(id), idx)
                   let elements = previousEls[id].elements;
                   if (previousIds.indexOf(id) !== idx) {
                     // Move the existing item into the frag to maintain order
                     for (let elIdx = 0; elIdx < elements.length; elIdx++) {
                       lastElement.after(...elements);
+                      // frag.appendChild(elements[elIdx])
                     }
                   }
 
@@ -483,9 +488,13 @@ if (typeof HTMLElement !== "undefined") {
               }
 
               delete oCtx.__childcontexts__[`${templateIdx}-${id}`];
+              // delete previous[id];
             }
 
             binding.attrs[attr].previous = current;
+
+            // If this the template is being rendered create bindings on the parent scope
+            // el.parentNode.insertBefore(frag, el);
           };
 
           binding.attrs[`template-${templateIdx}`].bindings.push(fn);
@@ -740,6 +749,7 @@ export class ContextBlocks {
       return a;
     }, {});
 
+    this.__elements__ = {};
     this.__bindings__ = {};
 
     let props = Object.keys(obj);
@@ -771,35 +781,35 @@ export class ContextBlocks {
     return this.__values__;
   }
 
+  // There's no real point to bind/bindOnce, moving all binds to bind once
+  // although I should probably just get rid of bind once (I'll do that later)
+
   bind(element, key, fn) {
-    if (!this.__subscriptions__.hasOwnProperty(key)) {
-      console.warn(`Can not bind ${element} to ${key}: no such key exists`);
-      return;
-    }
+    return this.bindOnce(element, key, fn);
+    // if (!this.__subscriptions__.hasOwnProperty(key)) {
+    //   console.warn(`Can not bind ${element} to ${key }: no such key exists`);
+    //   return;
+    // }
 
-    if (!element.isConnected) {
-      console.warn(
-        `Can not bind ${element} to ${key}: the element is not connected to the DOM`,
-      );
-      return;
-    }
+    // if (!element.isConnected) {
+    //   console.warn(`Can not bind ${element} to ${key}: the element is not connected to the DOM`)
+    //   return;
+    // }
 
-    let wrapped = (newValue, oldValue) => {
-      if (!element.isConnected) {
-        this.__subscriptions__[key] = this.__subscriptions__[key].filter(
-          (s) => {
-            return s !== wrapped;
-          },
-        );
+    // let wrapped = (newValue, oldValue) => {
+    //   if (!element.isConnected) {
+    //     this.__subscriptions__[key] = this.__subscriptions__[key].filter((s) => {
+    //       return s !== wrapped;
+    //     })
 
-        return;
-      }
+    //     return
+    //   }
 
-      fn(newValue, oldValue);
-    };
+    //   fn(newValue, oldValue);
+    // }
 
-    this.__subscriptions__[key].push(wrapped);
-    wrapped(this.__values__[key], null);
+    // this.__subscriptions__[key].push(wrapped);
+    // wrapped(this.__values__[key], null);
   }
 
   bindOnce(element, key, fn) {
@@ -815,6 +825,28 @@ export class ContextBlocks {
       return;
     }
 
+    if (!this.__bindings__[key]) {
+      this.__bindings__[key] = [];
+    }
+
+    // For this key, just do a check for any unused elements in case the key is not accessed
+    // without multiple copies being created
+    this.__bindings__[key].map((b) => {
+      if (!b.element.isConnected) {
+        this.__subscriptions__[key] = this.__subscriptions__[key].filter(
+          (s) => {
+            return s !== b.fn;
+          },
+        );
+
+        this.__bindings__[key] = this.__bindings__[key].filter((e) => {
+          return e.element !== b.element;
+        });
+
+        return;
+      }
+    });
+
     let wrapped = (newValue, oldValue) => {
       if (!element.isConnected) {
         this.__subscriptions__[key] = this.__subscriptions__[key].filter(
@@ -823,7 +855,9 @@ export class ContextBlocks {
           },
         );
 
-        this.__bindings__ = this.__bindings__.filter((e) => e !== element);
+        this.__bindings__[key] = this.__bindings__[key].filter((e) => {
+          return e.element !== element;
+        });
 
         return;
       }
@@ -831,16 +865,15 @@ export class ContextBlocks {
       fn(newValue, oldValue);
     };
 
-    if (!this.__bindings__[key]) {
-      this.__bindings__[key] = [];
-    }
-
-    let binding = this.__bindings__[key].find((e) => e === element);
+    let binding = this.__bindings__[key].find((e) => e.element === element);
     if (!!binding) {
       return;
     }
 
-    this.__bindings__[key].push(element);
+    this.__bindings__[key].push({
+      element: element,
+      fn: wrapped,
+    });
     this.__subscriptions__[key].push(wrapped);
     wrapped(this.__values__[key], null);
   }
